@@ -4,9 +4,6 @@ import pydantic as pyd
 from pyspark.sql import DataFrame
 import importlib
 
-
-
-
 hadoop_home = "C:\\Users\\ekkor\\hadoop"  # Set the path to your Hadoop installation directory here
 spark_home = 'C:\\Users\\ekkor\\spark\\spark-3.3.2-bin-hadoop3'
 os.environ["HADOOP_HOME"] = hadoop_home
@@ -21,11 +18,13 @@ spark.sparkContext.setLogLevel("WARN")
 # Configure the database connection properties
 database = "BikeShop"
 
-url = "jdbc:sqlserver://data-engineer-trial-db.cjuukq3gfs6h.eu-central-1.rds.amazonaws.com:1433;databaseName=" + database+";encrypt=true;trustServerCertificate=true;"
+url = "jdbc:sqlserver://data-engineer-trial-db.cjuukq3gfs6h.eu-central-1.rds.amazonaws.com:1433;databaseName=" + database + ";encrypt=true;trustServerCertificate=true;"
 properties = {
     "user": "de_candidate",
     "password": "b4rb0r4-d4t4"
 }
+# df = spark.read.jdbc(url=url, table="Categories", properties=properties)
+# df.show()
 # //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 def check_uniqueness(df):
@@ -38,7 +37,7 @@ def check_uniqueness(df):
         return "Duplicate rows found."
 
 
-def validate_types(df: DataFrame, model: pyd.BaseModel, index_offset: int = 2) -> tuple[int, int]:
+def validate(df: DataFrame, model: pyd.BaseModel, index_offset: int = 2) -> tuple[int, int]:
     good_data = []
     bad_data = []
     df_rows = [row.asDict() for row in df.collect()]
@@ -51,6 +50,7 @@ def validate_types(df: DataFrame, model: pyd.BaseModel, index_offset: int = 2) -
             row['Error_row_num'] = index + index_offset
             bad_data.append(row)
     return (len(good_data), len(bad_data))
+
 
 def get_schema(file_path="tableschemas.py"):
     objects = []
@@ -66,24 +66,13 @@ def get_schema(file_path="tableschemas.py"):
     return objects
 
 
-
-
-
-
-
-
 # table_names = ["Brands", "Categories", "Customers", "Order_items", "Orders", "Products", "Staffs", "Stocks", "Stores"]
-table_names = ["Brands", ]
+table_names = ["Brands", "Categories"]
 info = list(zip(table_names, get_schema()))
-print(info)
+
 for table in info:
-        df = spark.read.jdbc(url=url, table=table[0], properties=properties)
-        print(check_uniqueness(df))
-        print(validate_types(df, table[1]))
-
-
-
-
-
+    df = spark.read.jdbc(url=url, table=table[0], properties=properties)
+    print(check_uniqueness(df))
+    print(validate(df, table[1]))
 
 # Show the DataFrame
