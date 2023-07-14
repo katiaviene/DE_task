@@ -23,6 +23,10 @@ db_file = 'copydb.db'
 
 
 def get_schema(file_path: str = "tableschemas.py") -> list:
+    """Imports BaseModel objects from file with tables' models
+    :param file_path: filepath string
+    :return: list of objects
+    """
     objects = []
     module_name = file_path.replace(".py", "")
     module = importlib.import_module(module_name)
@@ -35,6 +39,13 @@ def get_schema(file_path: str = "tableschemas.py") -> list:
 
 
 def validate(df: DataFrame, model: pyd.BaseModel, index_offset: int = 2) -> tuple[int, int, list]:
+    """ Validates dataframes with tables' models
+
+    :param df: spark DataFrame
+    :param model: pydantic BaseModel
+    :param index_offset:
+    :return: count of good_data rows, bad_data rows and bad_data rows details
+    """
     good_data = []
     bad_data = []
     df_rows = [row.asDict() for row in df.collect()]
@@ -46,10 +57,14 @@ def validate(df: DataFrame, model: pyd.BaseModel, index_offset: int = 2) -> tupl
             row['Errors'] = [error_message['msg'] for error_message in e.errors()]
             row['Error_row_num'] = index + index_offset
             bad_data.append(row)
-    return (len(good_data), len(bad_data), bad_data)
+    return len(good_data), len(bad_data), bad_data
 
 
 def check_uniqueness(df: DataFrame) -> str:
+    """ Checks uniqueness of rows in dataframe
+    :param df: DataFrame
+    :return: message sting with test result
+    """
     total_count = df.count()
     distinct_count = df.distinct().count()
 
@@ -60,6 +75,14 @@ def check_uniqueness(df: DataFrame) -> str:
 
 
 def check_foreign(df, df2, primary):
+    """ Checks if values in 2nd table foreign key column excist in
+    table that is being checked primary key column values
+
+    :param df: Dataframe
+    :param df2: DataFrame
+    :param primary: column name
+    :return: message string
+    """
     if primary in df2.columns:
         primary_values = [row[0] for row in df.select(primary).collect()]
         if df2.filter(col(primary).isin(primary_values)).count() > 0:
@@ -70,11 +93,21 @@ def check_foreign(df, df2, primary):
         pass
 
 
-def check_nulls(column):
+def check_nulls(column: str):
+    """ Checking how much null values is in table column
+
+    :param column: column name
+    :return:
+    """
     return df.select(col(column).isNull().alias('isNull')).groupBy('isNull').count()
 
 
 def create_pdf_report(output_file):
+    """ Created pdf file with data quality check result
+
+    :param output_file: filename
+    :return: None
+    """
     dataframe = pd.DataFrame({"id": [1, 2, 3], "name": [2, 3, 4]})
     data = [list(dataframe.columns)] + dataframe.values.tolist()
     doc = SimpleDocTemplate(output_file, pagesize=letter)
@@ -96,8 +129,51 @@ def create_pdf_report(output_file):
 
 
 def write_to_file(df, name):
+    """ Converts dataframe to pandas and writes to Excel file
+
+    :param df: Dataframe
+    :param name: filename
+    :return:
+    """
     pd_df = df.toPandas()
     pd_df.to_excel(name, index=False)
+
+
+def write_to_db(df, db_file, table_name):
+    """ Converts datframe to pandas and writes to database
+
+    :param df: datafrmae
+    :param db_file: path to database
+    :param table_name: name of the table
+    :return:
+    """
+    conn = sqlite3.connect(db_file)
+    pd_df = df.toPandas()
+    datetime_columns = pd_df.select_dtypes(include='datetime')
+    pd_df[datetime_columns.columns] = datetime_columns.apply(
+        lambda x: x.strftime("%Y-%m-%d") if x.notnull().all() else x)
+    table_name = table_name
+    try:
+        pd_df.to_sql(table_name, conn, if_exists="replace", index=False)
+    except:
+        pass
+    conn.commit()
+
+    conn.close()
+
+
+def transform_copied_data(query):
+    """ Runs query agains new database, fetches result
+
+    :param query:
+    :return: result of the query
+    """
+    conn = sqlite3.connect("copydb.db")
+    cursor = conn.cursor()
+    cursor.execute(query)
+    tables = cursor.fetchall()
+    conn.close()
+    return tables
 
 
 if __name__ == "__main__":
@@ -123,6 +199,8 @@ if __name__ == "__main__":
             key_test = check_foreign(df, df1, table[2])
         for column in df.columns:
             null_test = check_nulls(column)
-        # df.write.jdbc(table=table[0], url=database_url, mode="overwrite", properties=connection_properties)
+        write_to_db(df, db_file, table[0])
         write_to_file(df, f"copied_data/{table[0]}.xlsx")
     create_pdf_report('report.pdf')
+
+    print(tables)
