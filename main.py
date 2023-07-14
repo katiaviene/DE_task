@@ -116,7 +116,6 @@ if __name__ == "__main__":
     info = list(zip(TABLE_NAMES, get_schema(), PRIMARY_KEYS))
     for table in info:
         df = spark.read.jdbc(url=url, table=table[0], properties=properties)
-        df.show()
         unique_test = check_uniqueness(df)
         validate_test = validate(df, table[1])
         for table1 in info:
@@ -125,5 +124,5 @@ if __name__ == "__main__":
         for column in df.columns:
             null_test = check_nulls(column)
         # df.write.jdbc(table=table[0], url=database_url, mode="overwrite", properties=connection_properties)
-        write_to_file(df, f"{table[0]}.xlsx")
+        write_to_file(df, f"copied_data/{table[0]}.xlsx")
     create_pdf_report('report.pdf')
