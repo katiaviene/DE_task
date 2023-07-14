@@ -203,4 +203,4 @@ if __name__ == "__main__":
         write_to_file(df, f"copied_data/{table[0]}.xlsx")
     create_pdf_report('report.pdf')
 
-    print(tables)
+
