@@ -39,6 +39,7 @@ class ProductSchema(pyd.BaseModel):
             raise ValueError('Year must be between 1900 and 2100')
         return value
 
+
 class OrderItemSchema(pyd.BaseModel):
     order_id: int = pyd.Field(ge=1)
     item_id: int
@@ -46,6 +47,7 @@ class OrderItemSchema(pyd.BaseModel):
     quantity: int
     list_price: pyd.condecimal(decimal_places=2)
     discount: pyd.condecimal(decimal_places=2)
+
 
 class OrdersSchema(pyd.BaseModel):
     order_id: int = pyd.Field(ge=1)
@@ -66,5 +68,33 @@ class OrdersSchema(pyd.BaseModel):
     @pyd.validator('shipped_date')
     def validate_shipped(cls, value, values):
         if 'shipped_date' in values and value <= values['order_date']:
-            raise ValueError('required_date must be greater than order_date')
+            raise ValueError('shipped_date must be greater than order_date')
         return value
+
+
+class StaffsSchema(pyd.BaseModel):
+    staff_id: int = pyd.Field(ge=1)
+    first_name: str
+    last_name: str
+    email: pyd.EmailStr
+    phone: str
+    active: int = pyd.Field(ge=0)
+    store_id: int
+    manager: Optional[int]
+
+
+class StockSchema(pyd.BaseModel):
+    store_id: int = pyd.Field(ge=1)
+    product_id: int
+    quantity: int
+
+
+class StoreSchema(pyd.BaseModel):
+    store_id: int = pyd.Field(ge=1)
+    store_name: str
+    phone: str
+    email: pyd.EmailStr
+    street: str
+    city: str
+    state: str = pyd.Field(max_length=2)
+    zip_code: str = pyd.Field(max_length=5)
