@@ -1,16 +1,12 @@
-import pandas as pd
-from config import hadoop_home, spark_home, database, url, properties, jar
+from config import hadoop_home, spark_home, url, properties, jar
 from pyspark.sql import SparkSession
 import os
 import pydantic as pyd
 from pyspark.sql import DataFrame
 import importlib
 from pyspark.sql.functions import col, count
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table
-from reportlab.lib import colors
 import sqlite3
-import openpyxl
+from sqlite3 import Connection
 from functools import wraps
 from datetime import date
 
@@ -40,7 +36,11 @@ def get_schema(file_path: str = "tableschemas.py") -> list:
     return objects
 
 
-def report_writer_decorator(output_file=f"report{date.today().strftime('%Y-%m-%d')}.txt"):
+def zip_setup() -> list:
+    return list(zip(TABLE_NAMES, get_schema(), PRIMARY_KEYS))
+
+
+def report_writer_decorator(output_file: str = f"report{date.today().strftime('%Y-%m-%d')}.txt"):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -83,6 +83,7 @@ def validate(df: DataFrame, model: pyd.BaseModel, index_offset: int = 2) -> str:
 @report_writer_decorator()
 def check_uniqueness(df: DataFrame, tablename: str) -> str:
     """ Checks uniqueness of rows in dataframe
+    :param tablename: string of table name
     :param df: DataFrame
     :return: message sting with test result
     """
@@ -94,7 +95,7 @@ def check_uniqueness(df: DataFrame, tablename: str) -> str:
 
 
 @report_writer_decorator()
-def check_foreign(df, df2, primary, table1, table2):
+def check_foreign(df: DataFrame, df2: DataFrame, primary: str, table1: str, table2: str) -> str:
     """ Checks if values in 2nd table foreign key column excist in
     table that is being checked primary key column values
 
@@ -110,9 +111,10 @@ def check_foreign(df, df2, primary, table1, table2):
 
 
 @report_writer_decorator()
-def check_nulls(df: DataFrame, tablename: str):
+def check_nulls(df: DataFrame, tablename: str) -> str:
     """ Checking how much null values is in table column
 
+    :param tablename: table name
     :param df: DataFrame
     :return:
     """
@@ -129,7 +131,7 @@ def check_nulls(df: DataFrame, tablename: str):
         return f"{tablename} Null values found \n" + ''.join(message)
 
 
-def write_to_file(df, name):
+def write_to_file(df: DataFrame, name: str) -> None:
     """ Converts dataframe to pandas and writes to Excel file
 
     :param df: Dataframe
@@ -140,7 +142,7 @@ def write_to_file(df, name):
     pd_df.to_excel(name, index=False)
 
 
-def write_to_db(df, db_file, table_name):
+def write_to_db(df: DataFrame, table_name: str, conn: Connection) -> None:
     """ Converts datframe to pandas and writes to database
 
     :param df: datafrmae
@@ -148,7 +150,7 @@ def write_to_db(df, db_file, table_name):
     :param table_name: name of the table
     :return:
     """
-    conn = sqlite3.connect(db_file)
+
     pd_df = df.toPandas()
     datetime_columns = pd_df.select_dtypes(include='datetime')
     pd_df[datetime_columns.columns] = datetime_columns.apply(
@@ -162,7 +164,7 @@ def write_to_db(df, db_file, table_name):
     conn.close()
 
 
-def transform_copied_data(query):
+def transform_copied_data(query: str) -> list:
     """ Runs query agains new database, fetches result
 
     :param query:
@@ -177,11 +179,13 @@ def transform_copied_data(query):
 
 
 if __name__ == "__main__":
+    # start spark session
     spark = SparkSession.builder \
         .appName("Read from Database") \
         .config("spark.driver.extraClassPath", jar) \
         .getOrCreate()
-    spark.sparkContext.setLogLevel("WARN")
+
+    # connect to sqlite db
     conn = sqlite3.connect(db_file)
     database_url = "jdbc:sqlite:copy.db"
     connection_properties = {
@@ -189,14 +193,17 @@ if __name__ == "__main__":
         "url": database_url
     }
 
-    info = list(zip(TABLE_NAMES, get_schema(), PRIMARY_KEYS))
-    for table in info:
+    setup_list = zip_setup()
+    for table in setup_list:
         df = spark.read.jdbc(url=url, table=table[0], properties=properties)
+        # data quality checks
         check_uniqueness(df, table[0])
         validate(df, table[1])
         check_nulls(df, table[0])
-        write_to_db(df, db_file, table[0])
-        for table1 in info:
+        for table1 in setup_list:
             df1 = spark.read.jdbc(url=url, table=table1[0], properties=properties)
             check_foreign(df, df1, table[2], table[0], table1[0])
+
+        # write to db
+        write_to_db(df, table[0], conn)
         write_to_file(df, f"copied_data/{table[0]}.xlsx")
