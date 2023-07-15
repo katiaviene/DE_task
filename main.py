@@ -93,13 +93,22 @@ def check_foreign(df, df2, primary):
         pass
 
 
-def check_nulls(column: str):
+def check_nulls(df: DataFrame):
     """ Checking how much null values is in table column
 
-    :param column: column name
+    :param df: DataFrame
     :return:
     """
-    return df.select(col(column).isNull().alias('isNull')).groupBy('isNull').count()
+    message = []
+    for column in df.columns:
+        print(column)
+        checked_df = df.select(col(column).isNull().alias('isNull')).groupBy('isNull').count()
+        null_count_df = checked_df.filter(col("isNull") == True)
+        rows = null_count_df.collect()
+        if rows:
+            null_count = rows[0]['count']
+            message.append(f"{column}: Null values {null_count}")
+    return message
 
 
 def create_pdf_report(output_file):
@@ -196,10 +205,7 @@ if __name__ == "__main__":
         for table1 in info:
             df1 = spark.read.jdbc(url=url, table=table1[0], properties=properties)
             key_test = check_foreign(df, df1, table[2])
-        for column in df.columns:
-            null_test = check_nulls(column)
+            null_test = check_nulls(df)
         write_to_db(df, db_file, table[0])
         write_to_file(df, f"copied_data/{table[0]}.xlsx")
     create_pdf_report('report.pdf')
-
-

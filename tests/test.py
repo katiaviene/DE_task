@@ -1,6 +1,6 @@
 import pandas as pd
 from pyspark.sql import SparkSession
-from main import write_to_file, check_uniqueness
+from main import write_to_file, check_uniqueness, check_nulls
 from pyspark.sql.types import StringType, IntegerType, StructField, StructType
 import os
 import sys
@@ -59,8 +59,6 @@ def test_write_to_file_equal(tmpdir, data):
     file_path = os.path.join(tmpdir, "test_output.xlsx")
     write_to_file(df, file_path)
     df_check = pd.read_excel(file_path)
-    print(df_check)
-    print(df.toPandas())
     assert df_check.equals(df.toPandas())
     os.remove(file_path)
 
@@ -90,3 +88,27 @@ def test_check_uniqueness(test_data):
     unique_df = spark.createDataFrame(unique_data, columns)
     result = check_uniqueness(unique_df)
     assert result == "All rows are unique."
+
+@pytest.mark.parametrize("expected_result, data", [
+    ( ["age: Null values 2"],[
+        (1, "John", None),
+        (2, "Alice", 25),
+        (3, "Bob", 30),
+        (4, "Charlie", None)
+    ]
+     ),
+    (["name: Null values 1", "age: Null values 2"],
+     [
+         (1, "John", None),
+         (2, "Alice", 25),
+         (3, None, 30),
+         (4, "Charlie", None)
+     ]
+     )
+])
+def test_check_nulls( expected_result, data):
+    columns = ["id", "name", "age"]
+    df = spark.createDataFrame(data, columns)
+    result = check_nulls(df)
+    print(result)
+    assert result == expected_result
