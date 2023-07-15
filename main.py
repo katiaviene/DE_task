@@ -11,6 +11,8 @@ from reportlab.platypus import SimpleDocTemplate, Table
 from reportlab.lib import colors
 import sqlite3
 import openpyxl
+from functools import wraps
+from datetime import date
 
 os.environ["HADOOP_HOME"] = hadoop_home
 os.environ["SPARK_HOME"] = spark_home
@@ -38,7 +40,24 @@ def get_schema(file_path: str = "tableschemas.py") -> list:
     return objects
 
 
-def validate(df: DataFrame, model: pyd.BaseModel, index_offset: int = 2) -> tuple[int, int, list]:
+def report_writer_decorator(output_file=f"report{date.today().strftime('%Y-%m-%d')}.txt"):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            message = func(*args, **kwargs)
+            with open(output_file, "a") as file:
+                if message:
+                    file.write(message)
+                    file.write("\n")
+            return message
+
+        return wrapper
+
+    return decorator
+
+
+@report_writer_decorator()
+def validate(df: DataFrame, model: pyd.BaseModel, index_offset: int = 2) -> str:
     """ Validates dataframes with tables' models
 
     :param df: spark DataFrame
@@ -57,10 +76,12 @@ def validate(df: DataFrame, model: pyd.BaseModel, index_offset: int = 2) -> tupl
             row['Errors'] = [error_message['msg'] for error_message in e.errors()]
             row['Error_row_num'] = index + index_offset
             bad_data.append(row)
-    return len(good_data), len(bad_data), bad_data
+    if bad_data:
+        return f"Validation failed on row count: {len(bad_data)}"
 
 
-def check_uniqueness(df: DataFrame) -> str:
+@report_writer_decorator()
+def check_uniqueness(df: DataFrame, tablename: str) -> str:
     """ Checks uniqueness of rows in dataframe
     :param df: DataFrame
     :return: message sting with test result
@@ -68,13 +89,12 @@ def check_uniqueness(df: DataFrame) -> str:
     total_count = df.count()
     distinct_count = df.distinct().count()
 
-    if total_count == distinct_count:
-        return "All rows are unique."
-    else:
-        return "Duplicate rows found."
+    if total_count != distinct_count:
+        return f"{tablename}: Duplicate rows found."
 
 
-def check_foreign(df, df2, primary):
+@report_writer_decorator()
+def check_foreign(df, df2, primary, table1, table2):
     """ Checks if values in 2nd table foreign key column excist in
     table that is being checked primary key column values
 
@@ -85,15 +105,12 @@ def check_foreign(df, df2, primary):
     """
     if primary in df2.columns:
         primary_values = [row[0] for row in df.select(primary).collect()]
-        if df2.filter(col(primary).isin(primary_values)).count() > 0:
-            return "good"
-        else:
-            return "not good"
-    else:
-        pass
+        if df2.filter(col(primary).isin(primary_values)).count() <= 0:
+            return f"{table1} vs {table2} : keys connection error found"
 
 
-def check_nulls(df: DataFrame):
+@report_writer_decorator()
+def check_nulls(df: DataFrame, tablename: str):
     """ Checking how much null values is in table column
 
     :param df: DataFrame
@@ -108,33 +125,8 @@ def check_nulls(df: DataFrame):
         if rows:
             null_count = rows[0]['count']
             message.append(f"{column}: Null values {null_count}")
-    return message
-
-
-def create_pdf_report(output_file):
-    """ Created pdf file with data quality check result
-
-    :param output_file: filename
-    :return: None
-    """
-    dataframe = pd.DataFrame({"id": [1, 2, 3], "name": [2, 3, 4]})
-    data = [list(dataframe.columns)] + dataframe.values.tolist()
-    doc = SimpleDocTemplate(output_file, pagesize=letter)
-    elements = []
-    table = Table(data)
-    style = [
-        ('BACKGROUND', (0, 0), (-1, 0), colors.gray),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 12),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
-    ]
-    table.setStyle(style)
-    elements.append(table)
-    doc.build(elements)
+    if message:
+        return f"{tablename} Null values found \n" + ''.join(message)
 
 
 def write_to_file(df, name):
@@ -200,12 +192,11 @@ if __name__ == "__main__":
     info = list(zip(TABLE_NAMES, get_schema(), PRIMARY_KEYS))
     for table in info:
         df = spark.read.jdbc(url=url, table=table[0], properties=properties)
-        unique_test = check_uniqueness(df)
+        unique_test = check_uniqueness(df, table[0])
         validate_test = validate(df, table[1])
         for table1 in info:
             df1 = spark.read.jdbc(url=url, table=table1[0], properties=properties)
-            key_test = check_foreign(df, df1, table[2])
-            null_test = check_nulls(df)
+            key_test = check_foreign(df, df1, table[2], table[0], table1[0])
+        null_test = check_nulls(df, table[0])
         write_to_db(df, db_file, table[0])
         write_to_file(df, f"copied_data/{table[0]}.xlsx")
-    create_pdf_report('report.pdf')
