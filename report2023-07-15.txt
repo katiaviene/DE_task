@@ -1,0 +1,6 @@
+Customers Null values found 
+phone: Null values 1267
+Orders Null values found 
+shipped_date: Null values 170
+Staffs Null values found 
+manager_id: Null values 1

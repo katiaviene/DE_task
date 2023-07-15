@@ -192,11 +192,11 @@ if __name__ == "__main__":
     info = list(zip(TABLE_NAMES, get_schema(), PRIMARY_KEYS))
     for table in info:
         df = spark.read.jdbc(url=url, table=table[0], properties=properties)
-        unique_test = check_uniqueness(df, table[0])
-        validate_test = validate(df, table[1])
+        check_uniqueness(df, table[0])
+        validate(df, table[1])
+        check_nulls(df, table[0])
+        write_to_db(df, db_file, table[0])
         for table1 in info:
             df1 = spark.read.jdbc(url=url, table=table1[0], properties=properties)
-            key_test = check_foreign(df, df1, table[2], table[0], table1[0])
-        null_test = check_nulls(df, table[0])
-        write_to_db(df, db_file, table[0])
+            check_foreign(df, df1, table[2], table[0], table1[0])
         write_to_file(df, f"copied_data/{table[0]}.xlsx")
