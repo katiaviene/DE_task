@@ -37,10 +37,17 @@ def get_schema(file_path: str = "tableschemas.py") -> list:
 
 
 def zip_setup() -> list:
+    """ combines required lists
+    :return: list
+    """
     return list(zip(TABLE_NAMES, get_schema(), PRIMARY_KEYS))
 
 
 def report_writer_decorator(output_file: str = f"report{date.today().strftime('%Y-%m-%d')}.txt"):
+    """ writes checks messages to report file
+    :param output_file: filename
+    """
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
