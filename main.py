@@ -158,7 +158,6 @@ def write_to_db(df, db_file, table_name):
     except:
         pass
     conn.commit()
-
     conn.close()
 
 
