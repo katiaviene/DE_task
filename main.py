@@ -10,6 +10,8 @@ from sqlite3 import Connection
 from functools import wraps
 from datetime import date
 
+
+
 os.environ["HADOOP_HOME"] = hadoop_home
 os.environ["SPARK_HOME"] = spark_home
 TABLE_NAMES = sorted(
@@ -127,7 +129,6 @@ def check_nulls(df: DataFrame, tablename: str) -> str:
     """
     message = []
     for column in df.columns:
-        print(column)
         checked_df = df.select(col(column).isNull().alias('isNull')).groupBy('isNull').count()
         null_count_df = checked_df.filter(col("isNull") == True)
         rows = null_count_df.collect()
@@ -135,7 +136,7 @@ def check_nulls(df: DataFrame, tablename: str) -> str:
             null_count = rows[0]['count']
             message.append(f"{column}: Null values {null_count}")
     if message:
-        return f"{tablename} Null values found \n" + ''.join(message)
+        return f"Table: {tablename} Null values found \n column " + ''.join(message)
 
 
 def write_to_file(df: DataFrame, name: str) -> None:
@@ -168,7 +169,27 @@ def write_to_db(df: DataFrame, table_name: str, conn: Connection) -> None:
     except:
         pass
     conn.commit()
-    conn.close()
+
+
+def pipeline(table: list):
+    """All operations combined
+
+    :param table: list of tuples with table name, table BaseModel and primary key column
+    :return: None
+    """
+    print(table[0])
+    df = spark.read.jdbc(url=url, table=table[0], properties=properties)
+    # data quality checks
+    check_uniqueness(df, table[0])
+    validate(df, table[1])
+    check_nulls(df, table[0])
+    for table1 in setup_list:
+        df1 = spark.read.jdbc(url=url, table=table1[0], properties=properties)
+        check_foreign(df, df1, table[2], table[0], table1[0])
+
+    # write to db
+    write_to_db(df, table[0], conn)
+    write_to_file(df, f"copied_data/{table[0]}.xlsx")
 
 
 def transform_copied_data(query: str) -> list:
@@ -186,13 +207,12 @@ def transform_copied_data(query: str) -> list:
 
 
 if __name__ == "__main__":
-    # start spark session
+
     spark = SparkSession.builder \
         .appName("Read from Database") \
         .config("spark.driver.extraClassPath", jar) \
         .getOrCreate()
 
-    # connect to sqlite db
     conn = sqlite3.connect(db_file)
     database_url = "jdbc:sqlite:copy.db"
     connection_properties = {
@@ -202,15 +222,6 @@ if __name__ == "__main__":
 
     setup_list = zip_setup()
     for table in setup_list:
-        df = spark.read.jdbc(url=url, table=table[0], properties=properties)
-        # data quality checks
-        check_uniqueness(df, table[0])
-        validate(df, table[1])
-        check_nulls(df, table[0])
-        for table1 in setup_list:
-            df1 = spark.read.jdbc(url=url, table=table1[0], properties=properties)
-            check_foreign(df, df1, table[2], table[0], table1[0])
+        pipeline(table)
+        conn.close()
 
-        # write to db
-        write_to_db(df, table[0], conn)
-        write_to_file(df, f"copied_data/{table[0]}.xlsx")

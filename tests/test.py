@@ -1,6 +1,6 @@
 import pandas as pd
 from pyspark.sql import SparkSession
-from main import write_to_file, check_uniqueness, check_nulls
+from main import write_to_file, check_uniqueness, check_nulls, check_foreign
 from pyspark.sql.types import StringType, IntegerType, StructField, StructType
 import os
 import sys
@@ -35,6 +35,7 @@ def test_write_to_file(tmpdir, data):
     write_to_file(df, file_path)
     assert os.path.isfile(file_path)
     os.remove(file_path)
+
 
 @pytest.mark.parametrize("data", [
     {
@@ -77,8 +78,9 @@ def test_data():
 
 
 def test_check_uniqueness(test_data):
-    result = check_uniqueness(test_data)
-    assert result == "Duplicate rows found."
+    tablename = "test"
+    result = check_uniqueness(test_data, tablename)
+    assert result == f"{tablename}: Duplicate rows found."
     unique_data = [
         ("Alice", 25),
         ("Bob", 30),
@@ -86,11 +88,12 @@ def test_check_uniqueness(test_data):
     ]
     columns = ["Name", "Age"]
     unique_df = spark.createDataFrame(unique_data, columns)
-    result = check_uniqueness(unique_df)
-    assert result == "All rows are unique."
+    result = check_uniqueness(unique_df, tablename)
+    assert result == None
+
 
 @pytest.mark.parametrize("expected_result, data", [
-    ( ["age: Null values 2"],[
+    (["age: Null values 2"], [
         (1, "John", None),
         (2, "Alice", 25),
         (3, "Bob", 30),
@@ -106,9 +109,37 @@ def test_check_uniqueness(test_data):
      ]
      )
 ])
-def test_check_nulls( expected_result, data):
+def test_check_nulls(expected_result, data):
     columns = ["id", "name", "age"]
+    tablename = "test"
     df = spark.createDataFrame(data, columns)
-    result = check_nulls(df)
-    print(result)
+    result = check_nulls(df, tablename)
     assert result == expected_result
+
+
+@pytest.fixture
+def test_data(spark_session):
+    data1 = [
+        (1, "John"),
+        (2, "Alice"),
+        (3, "Bob")
+    ]
+    columns1 = ["id", "name"]
+    df1 = spark_session.createDataFrame(data1, columns1)
+
+    data2 = [
+        (1, "Sales"),
+        (2, "Marketing"),
+        (3, "HR")
+    ]
+    columns2 = ["dept_id", "department"]
+    df2 = spark_session.createDataFrame(data2, columns2)
+
+    return df1, df2
+
+
+def test_check_foreign(test_data):
+    df1, df2 = test_data
+
+    result = check_foreign(df1, df2, "id", "table1", "table2")
+    assert result == "table1 vs table2: keys connection error found"
