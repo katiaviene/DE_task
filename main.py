@@ -1,4 +1,4 @@
-from config import hadoop_home, spark_home, url, properties, jar
+from config import  url, properties
 from pyspark.sql import SparkSession
 import os
 import pydantic as pyd
@@ -9,11 +9,19 @@ import sqlite3
 from sqlite3 import Connection
 from functools import wraps
 from datetime import date
+from pyspark.conf import SparkConf
 
+spark_home = os.environ.get("SPARK_HOME")
+driver_jar = "mssql-jdbc-12.2.0.jre8.jar"
+driver_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), driver_jar)
 
+# Initialize a SparkConf object
+spark_conf = SparkConf()
 
-os.environ["HADOOP_HOME"] = hadoop_home
-os.environ["SPARK_HOME"] = spark_home
+# Set the location of the MSSQL JDBC driver jar file dynamically
+spark_conf.set("spark.jars", driver_path)
+# os.environ["HADOOP_HOME"] = hadoop_home
+# os.environ["SPARK_HOME"] = spark_home
 TABLE_NAMES = sorted(
     ["Brands", "Categories", "Customers", "Order_items", "Orders", "Products", "Staffs", "Stocks", "Stores"])
 PRIMARY_KEYS = sorted(
@@ -202,7 +210,7 @@ def transform_copied_data(query: str) -> list:
     cursor = conn.cursor()
     cursor.execute(query)
     tables = cursor.fetchall()
-    conn.close()
+
     return tables
 
 
@@ -210,9 +218,9 @@ if __name__ == "__main__":
 
     spark = SparkSession.builder \
         .appName("Read from Database") \
-        .config("spark.driver.extraClassPath", jar) \
+        .config(conf=spark_conf) \
         .getOrCreate()
-
+    spark.conf.set("spark.sql.catalog.mssql", "com.microsoft.sqlserver.jdbc.SQLServerDialect")
     conn = sqlite3.connect(db_file)
     database_url = "jdbc:sqlite:copy.db"
     connection_properties = {
@@ -223,5 +231,5 @@ if __name__ == "__main__":
     setup_list = zip_setup()
     for table in setup_list:
         pipeline(table)
-        conn.close()
+    conn.close()
 
