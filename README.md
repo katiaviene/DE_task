@@ -2,7 +2,7 @@
 
 Extraxtion of data from BikeShop database tables, data quality checks, loading tables to Excel files by tables' names.
 
-Running image
+Running image\n
 Set credentials:
 DB_USERNAME
 DB_PASSWORD
