@@ -1,4 +1,5 @@
-from config import  url, properties
+import pandas as pd
+from config import url
 from pyspark.sql import SparkSession
 import os
 import pydantic as pyd
@@ -14,20 +15,28 @@ from pyspark.conf import SparkConf
 spark_home = os.environ.get("SPARK_HOME")
 driver_jar = "mssql-jdbc-12.2.0.jre8.jar"
 driver_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), driver_jar)
-
-# Initialize a SparkConf object
 spark_conf = SparkConf()
-
-# Set the location of the MSSQL JDBC driver jar file dynamically
 spark_conf.set("spark.jars", driver_path)
-# os.environ["HADOOP_HOME"] = hadoop_home
-# os.environ["SPARK_HOME"] = spark_home
+
 TABLE_NAMES = sorted(
     ["Brands", "Categories", "Customers", "Order_items", "Orders", "Products", "Staffs", "Stocks", "Stores"])
 PRIMARY_KEYS = sorted(
     ["brand_id", "category_id", "customer_id", "item_id", "order_id", "product_id", "staff_id", "stock_id", "store_id"])
 
 db_file = 'copydb.db'
+
+
+def get_credentials():
+    with open('env.txt', 'r') as env_file:
+        for line in env_file:
+            key, value = line.strip().split('=', 1)
+            os.environ[key] = value
+    properties = {
+        "user": os.getenv("DB_USERNAME"),
+        "password": os.getenv("DB_PASSWORD")
+
+    }
+    return properties
 
 
 def get_schema(file_path: str = "tableschemas.py") -> list:
@@ -179,13 +188,13 @@ def write_to_db(df: DataFrame, table_name: str, conn: Connection) -> None:
     conn.commit()
 
 
-def pipeline(table: list):
+def pipeline(table: list, properties):
     """All operations combined
 
     :param table: list of tuples with table name, table BaseModel and primary key column
     :return: None
     """
-    print(table[0])
+
     df = spark.read.jdbc(url=url, table=table[0], properties=properties)
     # data quality checks
     check_uniqueness(df, table[0])
@@ -198,6 +207,7 @@ def pipeline(table: list):
     # write to db
     write_to_db(df, table[0], conn)
     write_to_file(df, f"copied_data/{table[0]}.xlsx")
+    print(f"{table[0]} is checked and copied")
 
 
 def transform_copied_data(query: str) -> list:
@@ -215,7 +225,7 @@ def transform_copied_data(query: str) -> list:
 
 
 if __name__ == "__main__":
-
+    properties = get_credentials()
     spark = SparkSession.builder \
         .appName("Read from Database") \
         .config(conf=spark_conf) \
@@ -227,9 +237,15 @@ if __name__ == "__main__":
         "driver": "org.sqlite.JDBC",
         "url": database_url
     }
+    cursor = conn.cursor()
 
     setup_list = zip_setup()
     for table in setup_list:
-        pipeline(table)
-    conn.close()
+        pipeline(table, properties)
 
+        print("Copied data in DATABASE")
+        cursor.execute(f"SELECT * FROM {table[0]} LIMIT 5")
+        tables = cursor.fetchall()
+        print(pd.DataFrame(tables))
+
+    conn.close()

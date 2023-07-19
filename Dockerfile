@@ -36,5 +36,10 @@ ENV PATH="/barbora_DE_task/venv/Scripts:$PATH"
 RUN pip install -r requirements.txt
 RUN pip install pydantic[email]
 
+
+ENV DB_USERNAME=${DB_USERNAME}
+ENV DB_PASSWORD=${DB_PASSWORD}
+
+
 # Start your application
 CMD ["python", "main.py"]
