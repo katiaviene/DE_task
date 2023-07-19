@@ -177,14 +177,9 @@ def write_to_db(df: DataFrame, table_name: str, conn: Connection) -> None:
     """
 
     pd_df = df.toPandas()
-    datetime_columns = pd_df.select_dtypes(include='datetime')
-    pd_df[datetime_columns.columns] = datetime_columns.apply(
-        lambda x: x.strftime("%Y-%m-%d") if x.notnull().all() else x)
-    table_name = table_name
-    try:
-        pd_df.to_sql(table_name, conn, if_exists="replace", index=False)
-    except:
-        pass
+    bad_columns = pd_df.select_dtypes(include='object').columns
+    pd_df[bad_columns] = pd_df[bad_columns].astype('str')
+    pd_df.to_sql(table_name, conn, if_exists="replace", index=False)
     conn.commit()
 
 

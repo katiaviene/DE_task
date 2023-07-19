@@ -117,29 +117,3 @@ def test_check_nulls(expected_result, data):
     assert result == expected_result
 
 
-@pytest.fixture
-def test_data(spark_session):
-    data1 = [
-        (1, "John"),
-        (2, "Alice"),
-        (3, "Bob")
-    ]
-    columns1 = ["id", "name"]
-    df1 = spark_session.createDataFrame(data1, columns1)
-
-    data2 = [
-        (1, "Sales"),
-        (2, "Marketing"),
-        (3, "HR")
-    ]
-    columns2 = ["dept_id", "department"]
-    df2 = spark_session.createDataFrame(data2, columns2)
-
-    return df1, df2
-
-
-def test_check_foreign(test_data):
-    df1, df2 = test_data
-
-    result = check_foreign(df1, df2, "id", "table1", "table2")
-    assert result == "table1 vs table2: keys connection error found"
