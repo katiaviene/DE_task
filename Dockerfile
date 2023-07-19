@@ -42,4 +42,4 @@ ENV DB_PASSWORD=${DB_PASSWORD}
 
 
 # Start your application
-CMD ["pytest"]
+CMD ["pyton", "main.py"]
