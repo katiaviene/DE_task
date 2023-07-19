@@ -220,12 +220,16 @@ def transform_copied_data(query: str) -> list:
 
 
 if __name__ == "__main__":
+
     properties = get_credentials()
+    setup_list = zip_setup()
+
     spark = SparkSession.builder \
         .appName("Read from Database") \
         .config(conf=spark_conf) \
         .getOrCreate()
     spark.conf.set("spark.sql.catalog.mssql", "com.microsoft.sqlserver.jdbc.SQLServerDialect")
+
     conn = sqlite3.connect(db_file)
     database_url = "jdbc:sqlite:copy.db"
     connection_properties = {
@@ -234,7 +238,6 @@ if __name__ == "__main__":
     }
     cursor = conn.cursor()
 
-    setup_list = zip_setup()
     for table in setup_list:
         pipeline(table, properties)
 
